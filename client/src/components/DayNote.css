@@ -1,0 +1,60 @@
+.day-note {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.day-note-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0.5rem 1rem;
+  gap: 1rem;
+}
+
+.day-note-date {
+  font-size: 0.75rem;
+  font-weight: normal;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.saving-indicator {
+  font-size: 0.625rem;
+  color: var(--text-secondary);
+}
+
+.day-note-paper {
+  flex: 1;
+  display: flex;
+}
+
+.day-note-textarea {
+  width: 100%;
+  flex: 1;
+  padding: 0 1rem 1rem;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+  resize: none;
+  outline: none;
+}
+
+.day-note-textarea::placeholder {
+  color: var(--text-secondary);
+}
+
+@media (max-width: 600px) {
+  .day-note-textarea {
+    font-size: 1rem;
+    padding: 0 0.75rem 1rem;
+  }
+
+  .day-note-header {
+    padding: 0.5rem 0.75rem;
+  }
+}
