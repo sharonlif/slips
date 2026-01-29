@@ -34,7 +34,8 @@ export function useNotes(spaceId) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
 
-  // Load initial notes (future days + some past days)
+  // Load initial notes: past dates (oldest first) -> today -> future dates
+  // Scrolling down goes to future
   useEffect(() => {
     if (!spaceId) return;
 
@@ -43,18 +44,16 @@ export function useNotes(spaceId) {
 
       const today = new Date();
 
-      // Generate future dates (going forward from today)
-      const futureStart = new Date(today);
-      futureStart.setDate(futureStart.getDate() + FUTURE_DAYS);
-      const futureDates = generateDateRange(futureStart, FUTURE_DAYS, 'past');
+      // Generate past dates (oldest first): start from today, go back, then reverse
+      const pastDates = generateDateRange(today, DAYS_PER_PAGE - FUTURE_DAYS, 'past').reverse();
 
-      // Generate past dates (going backward from yesterday)
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-      const pastDates = generateDateRange(yesterday, DAYS_PER_PAGE - FUTURE_DAYS, 'past');
+      // Generate future dates (starting from tomorrow, going forward)
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const futureDates = generateDateRange(tomorrow, FUTURE_DAYS, 'future');
 
-      // Combine: future dates (newest first) + today + past dates
-      const allDates = [...futureDates, ...pastDates];
+      // Order: oldest past -> today (last of pastDates) -> future
+      const allDates = [...pastDates, ...futureDates];
 
       setDates(allDates);
 
@@ -67,18 +66,18 @@ export function useNotes(spaceId) {
     loadInitialNotes();
   }, [spaceId]);
 
-  // Load more notes (older dates)
+  // Load more notes (older dates - prepend to list)
   const loadMore = useCallback(async () => {
     if (!spaceId || loadingMore || !hasMore || dates.length === 0) return;
 
     setLoadingMore(true);
 
-    // Get the oldest date in current list and continue from there
-    const oldestDate = dates[dates.length - 1];
+    // Get the oldest date in current list and continue going back
+    const oldestDate = dates[0];
     const oldestDateObj = new Date(oldestDate + 'T00:00:00');
     oldestDateObj.setDate(oldestDateObj.getDate() - 1);
 
-    const moreDates = generateDateRange(oldestDateObj, DAYS_PER_PAGE, 'past');
+    const moreDates = generateDateRange(oldestDateObj, DAYS_PER_PAGE, 'past').reverse();
 
     if (moreDates.length === 0) {
       setHasMore(false);
@@ -88,7 +87,7 @@ export function useNotes(spaceId) {
 
     const fetchedNotes = await getNotes(spaceId, moreDates);
 
-    setDates(prev => [...prev, ...moreDates]);
+    setDates(prev => [...moreDates, ...prev]);
     setNotes(prev => ({ ...prev, ...fetchedNotes }));
     setLoadingMore(false);
   }, [spaceId, dates, loadingMore, hasMore]);
