@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { getNotes } from '../services/noteService';
 
 const DAYS_PER_PAGE = 30;
-const FUTURE_DAYS = 7; // Show 7 days into the future
+const FUTURE_DAYS = 7;
 
 function formatDate(date) {
   const year = date.getFullYear();
@@ -32,10 +32,9 @@ export function useNotes(spaceId) {
   const [dates, setDates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
+  const [loadingFuture, setLoadingFuture] = useState(false);
 
   // Load initial notes: past dates (oldest first) -> today -> future dates
-  // Scrolling down goes to future
   useEffect(() => {
     if (!spaceId) return;
 
@@ -66,13 +65,12 @@ export function useNotes(spaceId) {
     loadInitialNotes();
   }, [spaceId]);
 
-  // Load more notes (older dates - prepend to list)
-  const loadMore = useCallback(async () => {
-    if (!spaceId || loadingMore || !hasMore || dates.length === 0) return;
+  // Load more past dates (prepend to list)
+  const loadMorePast = useCallback(async () => {
+    if (!spaceId || loadingMore || dates.length === 0) return;
 
     setLoadingMore(true);
 
-    // Get the oldest date in current list and continue going back
     const oldestDate = dates[0];
     const oldestDateObj = new Date(oldestDate + 'T00:00:00');
     oldestDateObj.setDate(oldestDateObj.getDate() - 1);
@@ -80,7 +78,6 @@ export function useNotes(spaceId) {
     const moreDates = generateDateRange(oldestDateObj, DAYS_PER_PAGE, 'past').reverse();
 
     if (moreDates.length === 0) {
-      setHasMore(false);
       setLoadingMore(false);
       return;
     }
@@ -90,7 +87,31 @@ export function useNotes(spaceId) {
     setDates(prev => [...moreDates, ...prev]);
     setNotes(prev => ({ ...prev, ...fetchedNotes }));
     setLoadingMore(false);
-  }, [spaceId, dates, loadingMore, hasMore]);
+  }, [spaceId, dates, loadingMore]);
+
+  // Load more future dates (append to list)
+  const loadMoreFuture = useCallback(async () => {
+    if (!spaceId || loadingFuture || dates.length === 0) return;
+
+    setLoadingFuture(true);
+
+    const newestDate = dates[dates.length - 1];
+    const newestDateObj = new Date(newestDate + 'T00:00:00');
+    newestDateObj.setDate(newestDateObj.getDate() + 1);
+
+    const moreDates = generateDateRange(newestDateObj, DAYS_PER_PAGE, 'future');
+
+    if (moreDates.length === 0) {
+      setLoadingFuture(false);
+      return;
+    }
+
+    const fetchedNotes = await getNotes(spaceId, moreDates);
+
+    setDates(prev => [...prev, ...moreDates]);
+    setNotes(prev => ({ ...prev, ...fetchedNotes }));
+    setLoadingFuture(false);
+  }, [spaceId, dates, loadingFuture]);
 
   // Update a single note locally
   const updateNoteLocal = useCallback((date, content) => {
@@ -105,8 +126,9 @@ export function useNotes(spaceId) {
     dates,
     loading,
     loadingMore,
-    hasMore,
-    loadMore,
+    loadingFuture,
+    loadMorePast,
+    loadMoreFuture,
     updateNoteLocal
   };
 }

@@ -20,20 +20,21 @@ export function Notes({ user }) {
     dates,
     loading: notesLoading,
     loadingMore,
-    hasMore,
-    loadMore,
+    loadingFuture,
+    loadMorePast,
+    loadMoreFuture,
     updateNoteLocal
   } = useNotes(space?.id);
 
   const [showMenu, setShowMenu] = useState(false);
   const [todayVisible, setTodayVisible] = useState(true);
-  const [todayPosition, setTodayPosition] = useState('visible'); // 'above', 'below', 'visible'
+  const [todayPosition, setTodayPosition] = useState('visible');
   const [initialScrollDone, setInitialScrollDone] = useState(false);
   const menuRef = useRef(null);
   const fabRef = useRef(null);
-  const loadMoreSentinelRef = useRef(null);
+  const pastSentinelRef = useRef(null);
+  const futureSentinelRef = useRef(null);
   const todayRef = useRef(null);
-  const observerRef = useRef(null);
 
   const todayDate = getTodayDate();
 
@@ -67,11 +68,9 @@ export function Notes({ user }) {
         setTodayPosition('visible');
         setTodayVisible(true);
       } else if (rect.top < 0) {
-        // Today is above viewport (user scrolled down to future)
         setTodayPosition('above');
         setTodayVisible(false);
       } else {
-        // Today is below viewport (user scrolled up to past)
         setTodayPosition('below');
         setTodayVisible(false);
       }
@@ -83,40 +82,49 @@ export function Notes({ user }) {
 
   // Callback ref for today's element
   const setTodayRef = useCallback((node) => {
-    // Cleanup previous observer
-    if (observerRef.current) {
-      observerRef.current.disconnect();
-      observerRef.current = null;
-    }
-
     todayRef.current = node;
 
-    if (node) {
-      // Scroll to today on initial load
-      if (!initialScrollDone) {
-        node.scrollIntoView({ behavior: 'instant', block: 'start' });
-        setInitialScrollDone(true);
-      }
+    if (node && !initialScrollDone) {
+      node.scrollIntoView({ behavior: 'instant', block: 'start' });
+      setInitialScrollDone(true);
     }
   }, [initialScrollDone]);
 
-  // Load more (older dates) when scrolling to top
+  // Load more past dates when scrolling to top
   useEffect(() => {
-    if (!loadMoreSentinelRef.current || notesLoading || !hasMore) return;
+    if (!pastSentinelRef.current || notesLoading) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !loadingMore) {
-          loadMore();
+          loadMorePast();
         }
       },
       { rootMargin: '200px' }
     );
 
-    observer.observe(loadMoreSentinelRef.current);
+    observer.observe(pastSentinelRef.current);
 
     return () => observer.disconnect();
-  }, [loadMore, notesLoading, loadingMore, hasMore]);
+  }, [loadMorePast, notesLoading, loadingMore]);
+
+  // Load more future dates when scrolling to bottom
+  useEffect(() => {
+    if (!futureSentinelRef.current || notesLoading) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !loadingFuture) {
+          loadMoreFuture();
+        }
+      },
+      { rootMargin: '200px' }
+    );
+
+    observer.observe(futureSentinelRef.current);
+
+    return () => observer.disconnect();
+  }, [loadMoreFuture, notesLoading, loadingFuture]);
 
   async function handleSignOut() {
     try {
@@ -147,8 +155,8 @@ export function Notes({ user }) {
   return (
     <div className="notes-container">
       <main className="notes-list">
-        {/* Sentinel for loading more (older dates) at top */}
-        <div ref={loadMoreSentinelRef} className="scroll-sentinel">
+        {/* Sentinel for loading more past dates */}
+        <div ref={pastSentinelRef} className="scroll-sentinel">
           {loadingMore && <span className="loading-more">Loading...</span>}
         </div>
 
@@ -162,6 +170,11 @@ export function Notes({ user }) {
             onContentChange={(content) => updateNoteLocal(date, content)}
           />
         ))}
+
+        {/* Sentinel for loading more future dates */}
+        <div ref={futureSentinelRef} className="scroll-sentinel">
+          {loadingFuture && <span className="loading-more">Loading...</span>}
+        </div>
       </main>
 
       {/* User menu popup */}
