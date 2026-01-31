@@ -54,9 +54,9 @@ export function Login() {
         </button>
 
         <div className="login-legal">
-          <a href="/privacy">Privacy Policy</a>
+          <a href="https://legal.slips.dev/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
           <span className="login-legal-separator">·</span>
-          <a href="/terms">Terms of Use</a>
+          <a href="https://legal.slips.dev/terms" target="_blank" rel="noopener noreferrer">Terms of Use</a>
         </div>
       </div>
     </div>
