@@ -5,6 +5,7 @@ import {
   query,
   where,
   getDocs,
+  onSnapshot,
   orderBy,
   limit as firestoreLimit,
   serverTimestamp
@@ -47,6 +48,16 @@ export async function getNotes(spaceId, dates) {
   }
 
   return results;
+}
+
+export function subscribeToNote(spaceId, date, onUpdate) {
+  const noteRef = doc(db, 'spaces', spaceId, 'notes', date);
+
+  return onSnapshot(noteRef, (snapshot) => {
+    if (snapshot.exists()) {
+      onUpdate(snapshot.data());
+    }
+  });
 }
 
 export async function getNotesInRange(spaceId, startDate, endDate) {

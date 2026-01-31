@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, forwardRef } from 'react';
-import { updateNote } from '../services/noteService';
+import { updateNote, subscribeToNote } from '../services/noteService';
 import './DayNote.css';
 
 function formatDisplayDate(dateString) {
@@ -22,10 +22,32 @@ export const DayNote = forwardRef(function DayNote({ date, content, spaceId, onC
   const pendingContentRef = useRef(null);
   const isSavingRef = useRef(false);
   const textareaRef = useRef(null);
+  const lastSavedRef = useRef(content);
 
   useEffect(() => {
-    setLocalContent(content);
+    // Only sync if content differs from what we last saved (i.e., external change from another device)
+    if (content !== lastSavedRef.current) {
+      setLocalContent(content);
+      lastSavedRef.current = content;
+    }
   }, [content]);
+
+  // Subscribe to real-time updates from Firestore
+  useEffect(() => {
+    if (!spaceId) return;
+
+    const unsubscribe = subscribeToNote(spaceId, date, (data) => {
+      const remoteContent = data.content || '';
+      // Only update if content differs from what we last saved (external change)
+      if (remoteContent !== lastSavedRef.current) {
+        setLocalContent(remoteContent);
+        lastSavedRef.current = remoteContent;
+        onContentChange(remoteContent);
+      }
+    });
+
+    return unsubscribe;
+  }, [spaceId, date, onContentChange]);
 
   const saveNote = useCallback(async (contentToSave) => {
     if (!spaceId || isSavingRef.current) {
@@ -38,6 +60,7 @@ export const DayNote = forwardRef(function DayNote({ date, content, spaceId, onC
 
     try {
       await updateNote(spaceId, date, contentToSave);
+      lastSavedRef.current = contentToSave;
       onContentChange(contentToSave);
     } catch (err) {
       console.error('Error saving note:', err);
@@ -67,6 +90,29 @@ export const DayNote = forwardRef(function DayNote({ date, content, spaceId, onC
     }, 500);
   }
 
+  function handleKeyDown(e) {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const textarea = e.target;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const newContent = localContent.substring(0, start) + '\t' + localContent.substring(end);
+      setLocalContent(newContent);
+
+      // Restore cursor position after the tab
+      requestAnimationFrame(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + 1;
+      });
+
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      saveTimeoutRef.current = setTimeout(() => {
+        saveNote(newContent);
+      }, 500);
+    }
+  }
+
   useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) {
@@ -87,6 +133,7 @@ export const DayNote = forwardRef(function DayNote({ date, content, spaceId, onC
           className="day-note-textarea"
           value={localContent}
           onChange={handleChange}
+          onKeyDown={handleKeyDown}
           placeholder=""
         />
       </div>
