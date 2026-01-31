@@ -9,10 +9,13 @@ const googleClientId = defineSecret('GOOGLE_CLIENT_ID');
 const googleClientSecret = defineSecret('GOOGLE_CLIENT_SECRET');
 
 // Config (not secret)
-const REDIRECT_URI = 'https://slips-prod.web.app/auth/callback';
-const APP_URL = 'https://slips-prod.web.app';
+const REDIRECT_URI = 'https://app.slips.dev/auth/callback';
+const APP_URL = 'https://app.slips.dev';
 
 const SCOPES = [
+  'openid',
+  'email',
+  'profile',
   'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/calendar.events.readonly'
 ];
@@ -104,11 +107,11 @@ const handleCalendarCallback = onRequest({ secrets: [googleClientId, googleClien
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
 
-    // Get user info from Google
-    const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
-    const userInfo = await oauth2.userinfo.get();
-    const providerAccountId = userInfo.data.email;
-    const providerAccountName = userInfo.data.name || userInfo.data.email;
+    // Get user info from id_token
+    const idToken = tokens.id_token;
+    const payload = JSON.parse(Buffer.from(idToken.split('.')[1], 'base64').toString());
+    const providerAccountId = payload.email;
+    const providerAccountName = payload.name || payload.email;
 
     // Get calendar list
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
@@ -150,6 +153,7 @@ const handleCalendarCallback = onRequest({ secrets: [googleClientId, googleClien
     return res.redirect(`${APP_URL}/?calendar=connected`);
   } catch (err) {
     console.error('Callback error:', err);
+    console.error('Callback error:', err.message);
     return res.redirect(`${APP_URL}/?calendar=error&message=callback_failed`);
   }
 });
