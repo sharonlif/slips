@@ -25,6 +25,22 @@ service cloud.firestore {
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
     }
 
+    // Calendar connections - users can read their own connections
+    match /calendarConnections/{connectionId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow write: if false; // Only Cloud Functions can write
+    }
+
+    // Calendar tokens - server-only, no client access
+    match /calendarTokens/{tokenId} {
+      allow read, write: if false;
+    }
+
+    // Calendar auth states - server-only, no client access
+    match /calendarAuthStates/{stateId} {
+      allow read, write: if false;
+    }
+
     // Helper function to check if user is a member of a space
     function isMember(userId, spaceId) {
       return exists(/databases/$(database)/documents/memberships/$(userId + '_' + spaceId));

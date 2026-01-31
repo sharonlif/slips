@@ -52,6 +52,12 @@ export function Login() {
           </svg>
           {loading ? 'Signing in...' : 'Sign in with Google'}
         </button>
+
+        <div className="login-legal">
+          <a href="/privacy">Privacy Policy</a>
+          <span className="login-legal-separator">·</span>
+          <a href="/terms">Terms of Use</a>
+        </div>
       </div>
     </div>
   );

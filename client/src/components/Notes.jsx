@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSpace } from '../hooks/useSpace';
 import { useNotes } from '../hooks/useNotes';
+import { useCalendarConnections } from '../hooks/useCalendarConnections';
 import { signOut } from '../services/authService';
+import { connectGoogleCalendar, disconnectCalendar } from '../services/calendarService';
 import { DayNote } from './DayNote';
 import './Notes.css';
 
@@ -25,8 +27,10 @@ export function Notes({ user }) {
     loadMoreFuture,
     updateNoteLocal
   } = useNotes(space?.id);
+  const { connections: calendarConnections } = useCalendarConnections(user.uid);
 
   const [showMenu, setShowMenu] = useState(false);
+  const [calendarLoading, setCalendarLoading] = useState(false);
   const [todayVisible, setTodayVisible] = useState(true);
   const [todayPosition, setTodayPosition] = useState('visible');
   const [initialScrollDone, setInitialScrollDone] = useState(false);
@@ -134,6 +138,33 @@ export function Notes({ user }) {
     }
   }
 
+  async function handleConnectCalendar() {
+    setCalendarLoading(true);
+    setShowMenu(false);
+    try {
+      await connectGoogleCalendar();
+    } catch (err) {
+      console.error('Calendar connect error:', err);
+      setCalendarLoading(false);
+    }
+  }
+
+  async function handleDisconnectCalendar() {
+    const connection = calendarConnections[0];
+    if (!connection) return;
+
+    setCalendarLoading(true);
+    setShowMenu(false);
+    try {
+      await disconnectCalendar(connection.id);
+    } catch (err) {
+      console.error('Calendar disconnect error:', err);
+    }
+    setCalendarLoading(false);
+  }
+
+  const hasCalendarConnection = calendarConnections.length > 0;
+
   function scrollToToday() {
     if (todayRef.current) {
       todayRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -181,6 +212,35 @@ export function Notes({ user }) {
       {showMenu && (
         <div ref={menuRef} className="user-menu">
           <div className="user-menu-email">{user.email}</div>
+          {hasCalendarConnection ? (
+            <button
+              className="user-menu-btn user-menu-btn-calendar"
+              onClick={handleDisconnectCalendar}
+              disabled={calendarLoading}
+            >
+              <svg className="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              Disconnect Calendar
+            </button>
+          ) : (
+            <button
+              className="user-menu-btn user-menu-btn-calendar"
+              onClick={handleConnectCalendar}
+              disabled={calendarLoading}
+            >
+              <svg className="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              {calendarLoading ? 'Connecting...' : 'Connect Calendar'}
+            </button>
+          )}
           <button className="user-menu-btn" onClick={handleSignOut}>
             Sign out
           </button>

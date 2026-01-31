@@ -3,6 +3,10 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs20"
+  },
   "hosting": {
     "public": "client/dist",
     "ignore": [
@@ -11,6 +15,10 @@
       "**/node_modules/**"
     ],
     "rewrites": [
+      {
+        "source": "/auth/callback",
+        "function": "handleCalendarCallback"
+      },
       {
         "source": "**",
         "destination": "/index.html"

@@ -1,0 +1,15 @@
+const { initializeApp } = require('firebase-admin/app');
+
+// Initialize Firebase Admin
+initializeApp();
+
+// Export calendar auth functions
+const {
+  initiateCalendarAuth,
+  handleCalendarCallback,
+  disconnectCalendar
+} = require('./src/calendarAuth');
+
+exports.initiateCalendarAuth = initiateCalendarAuth;
+exports.handleCalendarCallback = handleCalendarCallback;
+exports.disconnectCalendar = disconnectCalendar;

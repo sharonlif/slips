@@ -65,3 +65,22 @@
   width: 18px;
   height: 18px;
 }
+
+.login-legal {
+  margin-top: 1.5rem;
+  font-size: 0.75rem;
+}
+
+.login-legal a {
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.login-legal a:hover {
+  color: var(--text-primary);
+}
+
+.login-legal-separator {
+  color: var(--text-secondary);
+  margin: 0 0.5rem;
+}
