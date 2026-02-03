@@ -23,6 +23,26 @@ export const DayNote = forwardRef(function DayNote({ date, content, spaceId, onC
   const isSavingRef = useRef(false);
   const textareaRef = useRef(null);
   const lastSavedRef = useRef(content);
+  const containerRef = useRef(null);
+
+  // Auto-resize textarea to fit content while maintaining minimum viewport height
+  const adjustTextareaHeight = useCallback(() => {
+    const textarea = textareaRef.current;
+    const container = containerRef.current;
+    if (!textarea || !container) return;
+
+    // Reset height to auto to get accurate scrollHeight
+    textarea.style.height = 'auto';
+
+    // Calculate minimum height (viewport minus header)
+    const header = container.querySelector('.day-note-header');
+    const headerHeight = header ? header.offsetHeight : 0;
+    const minTextareaHeight = window.innerHeight - headerHeight - 16; // 16px for padding
+
+    // Use the larger of scrollHeight or minimum height
+    const newHeight = Math.max(textarea.scrollHeight, minTextareaHeight);
+    textarea.style.height = `${newHeight}px`;
+  }, []);
 
   useEffect(() => {
     // Only sync if content differs from what we last saved (i.e., external change from another device)
@@ -31,6 +51,17 @@ export const DayNote = forwardRef(function DayNote({ date, content, spaceId, onC
       lastSavedRef.current = content;
     }
   }, [content]);
+
+  // Adjust height when content changes or on mount
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [localContent, adjustTextareaHeight]);
+
+  // Adjust height on window resize
+  useEffect(() => {
+    window.addEventListener('resize', adjustTextareaHeight);
+    return () => window.removeEventListener('resize', adjustTextareaHeight);
+  }, [adjustTextareaHeight]);
 
   // Subscribe to real-time updates from Firestore
   useEffect(() => {
@@ -121,8 +152,18 @@ export const DayNote = forwardRef(function DayNote({ date, content, spaceId, onC
     };
   }, []);
 
+  // Combine forwarded ref with local containerRef
+  const setRefs = useCallback((node) => {
+    containerRef.current = node;
+    if (typeof ref === 'function') {
+      ref(node);
+    } else if (ref) {
+      ref.current = node;
+    }
+  }, [ref]);
+
   return (
-    <div className="day-note" ref={ref}>
+    <div className="day-note" ref={setRefs}>
       <div className="day-note-header">
         {saving && <span className="saving-indicator">saving...</span>}
         <h2 className="day-note-date">{formatDisplayDate(date)}</h2>

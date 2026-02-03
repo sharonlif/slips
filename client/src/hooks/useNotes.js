@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getNotes } from '../services/noteService';
 
-const DAYS_PER_PAGE = 30;
+const DAYS_PER_PAGE = 10;
 const FUTURE_DAYS = 7;
 
 function formatDate(date) {

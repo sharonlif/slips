@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { useSpace } from '../hooks/useSpace';
 import { useNotes } from '../hooks/useNotes';
 import { useCalendarConnections } from '../hooks/useCalendarConnections';
@@ -39,6 +39,9 @@ export function Notes({ user }) {
   const pastSentinelRef = useRef(null);
   const futureSentinelRef = useRef(null);
   const todayRef = useRef(null);
+  const notesListRef = useRef(null);
+  const scrollRestoreRef = useRef(null); // Stores scroll info before loading past dates
+  const prevFirstDateRef = useRef(null); // Track first date to detect prepends
 
   const todayDate = getTodayDate();
 
@@ -94,6 +97,34 @@ export function Notes({ user }) {
     }
   }, [initialScrollDone]);
 
+  // Wrap loadMorePast to save scroll position before loading
+  const handleLoadMorePast = useCallback(() => {
+    // Save current scroll height before new content is added
+    scrollRestoreRef.current = {
+      scrollHeight: document.documentElement.scrollHeight,
+      scrollTop: window.scrollY
+    };
+    loadMorePast();
+  }, [loadMorePast]);
+
+  // Restore scroll position after past dates are prepended
+  useLayoutEffect(() => {
+    const firstDate = dates[0];
+
+    // Detect if new dates were prepended (first date changed)
+    if (prevFirstDateRef.current && firstDate !== prevFirstDateRef.current && scrollRestoreRef.current) {
+      const { scrollHeight: prevScrollHeight, scrollTop: prevScrollTop } = scrollRestoreRef.current;
+      const newScrollHeight = document.documentElement.scrollHeight;
+      const heightDiff = newScrollHeight - prevScrollHeight;
+
+      // Adjust scroll position by the height of newly added content
+      window.scrollTo(0, prevScrollTop + heightDiff);
+      scrollRestoreRef.current = null;
+    }
+
+    prevFirstDateRef.current = firstDate;
+  }, [dates]);
+
   // Load more past dates when scrolling to top
   useEffect(() => {
     if (!pastSentinelRef.current || notesLoading) return;
@@ -101,7 +132,7 @@ export function Notes({ user }) {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !loadingMore) {
-          loadMorePast();
+          handleLoadMorePast();
         }
       },
       { rootMargin: '200px' }
@@ -110,7 +141,7 @@ export function Notes({ user }) {
     observer.observe(pastSentinelRef.current);
 
     return () => observer.disconnect();
-  }, [loadMorePast, notesLoading, loadingMore]);
+  }, [handleLoadMorePast, notesLoading, loadingMore]);
 
   // Load more future dates when scrolling to bottom
   useEffect(() => {

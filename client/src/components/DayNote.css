@@ -3,6 +3,7 @@
   display: flex;
   flex-direction: column;
   border-bottom: 1px solid var(--border-color);
+  box-sizing: border-box;
 }
 
 .day-note-header {
@@ -26,13 +27,12 @@
 }
 
 .day-note-paper {
-  flex: 1;
-  display: flex;
+  display: block;
 }
 
 .day-note-textarea {
   width: 100%;
-  flex: 1;
+  min-height: calc(100vh - 3rem); /* Fallback before JS calculates */
   padding: 0 1rem 1rem;
   border: none;
   background: transparent;
@@ -42,6 +42,8 @@
   color: var(--text-primary);
   resize: none;
   outline: none;
+  overflow: hidden; /* Prevent scrollbar, content expands instead */
+  box-sizing: border-box;
 }
 
 .day-note-textarea::placeholder {
