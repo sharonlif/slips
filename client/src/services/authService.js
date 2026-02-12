@@ -14,13 +14,18 @@ const googleProvider = new GoogleAuthProvider();
 async function handleUserFirstSignIn(user) {
   const userRef = doc(db, 'users', user.uid);
   const userSnap = await getDoc(userRef);
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   if (!userSnap.exists()) {
     await setDoc(userRef, {
       email: user.email,
+      timezone,
       createdAt: serverTimestamp()
     });
     await createPersonalSpace(user.uid);
+  } else {
+    // Update timezone on every login (handles travel)
+    await setDoc(userRef, { timezone }, { merge: true });
   }
 }
 
