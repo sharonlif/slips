@@ -135,19 +135,24 @@ const triggerDailyAgent = onSchedule('every 1 hours', async (event) => {
 
   console.log(`Timezones at 22:00: ${matchingTimezones.join(', ')}`);
 
-  // Query users in matching timezones (Firestore 'in' supports up to 30)
-  const usersSnap = await db.collection('users')
-    .where('timezone', 'in', matchingTimezones.slice(0, 30))
-    .get();
+  // Query users in matching timezones (Firestore 'in' supports up to 30 per batch)
+  const userDocs = [];
+  for (let i = 0; i < matchingTimezones.length; i += 30) {
+    const batch = matchingTimezones.slice(i, i + 30);
+    const snap = await db.collection('users')
+      .where('timezone', 'in', batch)
+      .get();
+    snap.docs.forEach(d => userDocs.push(d));
+  }
 
-  if (usersSnap.empty) {
+  if (userDocs.length === 0) {
     console.log('No users in matching timezones.');
     return;
   }
 
   const queue = getFunctions().taskQueue('processDaily');
 
-  for (const userDoc of usersSnap.docs) {
+  for (const userDoc of userDocs) {
     const userId = userDoc.id;
 
     // Find user's space via memberships
