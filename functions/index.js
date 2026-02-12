@@ -13,3 +13,12 @@ const {
 exports.initiateCalendarAuth = initiateCalendarAuth;
 exports.handleCalendarCallback = handleCalendarCallback;
 exports.disconnectCalendar = disconnectCalendar;
+
+// Export daily agent functions
+const {
+  processDaily,
+  triggerDailyAgent
+} = require('./src/dailyAgent');
+
+exports.processDaily = processDaily;
+exports.triggerDailyAgent = triggerDailyAgent;
