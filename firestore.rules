@@ -41,6 +41,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Agent context - server-only, no client access
+    match /agentContext/{contextId} {
+      allow read, write: if false;
+    }
+
     // Helper function to check if user is a member of a space
     function isMember(userId, spaceId) {
       return exists(/databases/$(database)/documents/memberships/$(userId + '_' + spaceId));
