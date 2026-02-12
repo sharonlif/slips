@@ -1,11 +1,108 @@
 const { onTaskDispatched } = require('firebase-functions/v2/tasks');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { onRequest } = require('firebase-functions/v2/https');
 const { getFunctions } = require('firebase-admin/functions');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { defineSecret } = require('firebase-functions/params');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const geminiApiKey = defineSecret('GEMINI_API_KEY');
+const agentSecret = defineSecret('AGENT_API_SECRET');
+
+/**
+ * Core agent logic: processes a single user's daily summary.
+ * Shared by processDaily (task queue) and runDailyAgent (HTTP).
+ */
+async function runAgentForUser(userId, spaceId, targetDate, apiKey) {
+  const db = getFirestore();
+
+  // Step 1: Check if already processed
+  const contextRef = db.collection('agentContext').doc(spaceId);
+  const contextSnap = await contextRef.get();
+  const context = contextSnap.exists ? contextSnap.data() : {
+    lastSummarizedDate: null,
+    openTasks: [],
+    recentSummaries: [],
+  };
+
+  if (context.lastSummarizedDate === targetDate) {
+    console.log(`Already processed ${targetDate} for space ${spaceId}, skipping.`);
+    return { skipped: true, reason: 'already processed' };
+  }
+
+  // Step 2: Read today's note
+  const noteRef = db.collection('spaces').doc(spaceId).collection('notes').doc(targetDate);
+  const noteSnap = await noteRef.get();
+  const noteContent = noteSnap.exists ? noteSnap.data().content : '';
+
+  // If no note content and no open tasks, nothing to do
+  if (!noteContent && context.openTasks.length === 0) {
+    console.log(`No note and no open tasks for ${targetDate}, space ${spaceId}. Skipping.`);
+    await contextRef.set({
+      ...context,
+      lastSummarizedDate: targetDate,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return { skipped: true, reason: 'no note and no open tasks' };
+  }
+
+  // Step 3: Call Gemini
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+  const prompt = buildPrompt(noteContent, context.openTasks, context.recentSummaries, targetDate);
+
+  const result = await model.generateContent({
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+    },
+  });
+
+  const responseText = result.response.text();
+  const parsed = JSON.parse(responseText);
+
+  // Step 4: Update context
+  const completedSet = new Set((parsed.completedTasks || []).map(t => t.toLowerCase().trim()));
+  const updatedOpenTasks = context.openTasks.filter(
+    (task) => !completedSet.has(task.text.toLowerCase().trim())
+  );
+
+  for (const taskText of (parsed.newTasks || [])) {
+    updatedOpenTasks.push({ text: taskText, extractedFrom: targetDate });
+  }
+
+  const updatedSummaries = [
+    { date: targetDate, summary: parsed.summary || '' },
+    ...context.recentSummaries,
+  ].slice(0, 7);
+
+  await contextRef.set({
+    lastSummarizedDate: targetDate,
+    openTasks: updatedOpenTasks,
+    recentSummaries: updatedSummaries,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  // Step 5: Write tomorrow's note
+  const tomorrowDate = getNextDate(targetDate);
+  const tomorrowNoteRef = db.collection('spaces').doc(spaceId).collection('notes').doc(tomorrowDate);
+  const tomorrowSnap = await tomorrowNoteRef.get();
+  const existingContent = tomorrowSnap.exists ? (tomorrowSnap.data().content || '') : '';
+
+  const taskListText = parsed.tomorrowNote || formatTaskList(updatedOpenTasks);
+  const newContent = existingContent
+    ? `${taskListText}\n\n---\n\n${existingContent}`
+    : taskListText;
+
+  await tomorrowNoteRef.set({
+    content: newContent,
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  console.log(`Processed ${targetDate} for space ${spaceId}. Tasks: ${updatedOpenTasks.length} open.`);
+  return { success: true, summary: parsed.summary, openTasks: updatedOpenTasks.length, tomorrowDate };
+}
 
 /**
  * Task queue function: processes a single user's daily summary.
@@ -24,98 +121,43 @@ const processDaily = onTaskDispatched(
   },
   async (req) => {
     const { userId, spaceId, targetDate } = req.data;
-    const db = getFirestore();
-
-    // Step 1: Check if already processed
-    const contextRef = db.collection('agentContext').doc(spaceId);
-    const contextSnap = await contextRef.get();
-    const context = contextSnap.exists ? contextSnap.data() : {
-      lastSummarizedDate: null,
-      openTasks: [],
-      recentSummaries: [],
-    };
-
-    if (context.lastSummarizedDate === targetDate) {
-      console.log(`Already processed ${targetDate} for space ${spaceId}, skipping.`);
-      return;
-    }
-
-    // Step 2: Read today's note
-    const noteRef = db.collection('spaces').doc(spaceId).collection('notes').doc(targetDate);
-    const noteSnap = await noteRef.get();
-    const noteContent = noteSnap.exists ? noteSnap.data().content : '';
-
-    // If no note content and no open tasks, nothing to do
-    if (!noteContent && context.openTasks.length === 0) {
-      console.log(`No note and no open tasks for ${targetDate}, space ${spaceId}. Skipping.`);
-      // Still update lastSummarizedDate so we don't re-check
-      await contextRef.set({
-        ...context,
-        lastSummarizedDate: targetDate,
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
-      return;
-    }
-
-    // Step 3: Call Gemini
-    const genAI = new GoogleGenerativeAI(geminiApiKey.value());
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
-    const prompt = buildPrompt(noteContent, context.openTasks, context.recentSummaries, targetDate);
-
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: 'application/json',
-      },
-    });
-
-    const responseText = result.response.text();
-    const parsed = JSON.parse(responseText);
-
-    // Step 4: Update context
-    const completedSet = new Set((parsed.completedTasks || []).map(t => t.toLowerCase().trim()));
-    const updatedOpenTasks = context.openTasks.filter(
-      (task) => !completedSet.has(task.text.toLowerCase().trim())
-    );
-
-    // Add new tasks
-    for (const taskText of (parsed.newTasks || [])) {
-      updatedOpenTasks.push({ text: taskText, extractedFrom: targetDate });
-    }
-
-    // Update recent summaries (keep last 7)
-    const updatedSummaries = [
-      { date: targetDate, summary: parsed.summary || '' },
-      ...context.recentSummaries,
-    ].slice(0, 7);
-
-    await contextRef.set({
-      lastSummarizedDate: targetDate,
-      openTasks: updatedOpenTasks,
-      recentSummaries: updatedSummaries,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-
-    // Step 5: Write tomorrow's note
-    const tomorrowDate = getNextDate(targetDate);
-    const tomorrowNoteRef = db.collection('spaces').doc(spaceId).collection('notes').doc(tomorrowDate);
-    const tomorrowSnap = await tomorrowNoteRef.get();
-    const existingContent = tomorrowSnap.exists ? (tomorrowSnap.data().content || '') : '';
-
-    const taskListText = parsed.tomorrowNote || formatTaskList(updatedOpenTasks);
-    const newContent = existingContent
-      ? `${taskListText}\n\n---\n\n${existingContent}`
-      : taskListText;
-
-    await tomorrowNoteRef.set({
-      content: newContent,
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
-
-    console.log(`Processed ${targetDate} for space ${spaceId}. Tasks: ${updatedOpenTasks.length} open.`);
+    await runAgentForUser(userId, spaceId, targetDate, geminiApiKey.value());
   }
 );
+
+/**
+ * HTTP endpoint to manually trigger the agent for a specific user.
+ * Usage: curl -X POST <url> -H "Content-Type: application/json" \
+ *   -d '{"userId":"...","spaceId":"...","targetDate":"2026-02-12"}'
+ */
+const runDailyAgent = onRequest({ secrets: [geminiApiKey, agentSecret] }, async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed. Use POST.' });
+    return;
+  }
+
+  // Verify secret token
+  const authHeader = req.headers['x-agent-secret'];
+  if (!authHeader || authHeader !== agentSecret.value()) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  const { userId, spaceId, targetDate } = req.body;
+
+  if (!userId || !spaceId || !targetDate) {
+    res.status(400).json({ error: 'Missing required fields: userId, spaceId, targetDate' });
+    return;
+  }
+
+  try {
+    const result = await runAgentForUser(userId, spaceId, targetDate, geminiApiKey.value());
+    res.status(200).json(result);
+  } catch (err) {
+    console.error('runDailyAgent error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 /**
  * Scheduled function: runs every hour, finds users at 22:00 local time,
@@ -260,4 +302,4 @@ function formatTaskList(openTasks) {
   return `## Tasks\n${lines.join('\n')}`;
 }
 
-module.exports = { processDaily, triggerDailyAgent };
+module.exports = { processDaily, triggerDailyAgent, runDailyAgent };

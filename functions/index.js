@@ -17,8 +17,10 @@ exports.disconnectCalendar = disconnectCalendar;
 // Export daily agent functions
 const {
   processDaily,
-  triggerDailyAgent
+  triggerDailyAgent,
+  runDailyAgent
 } = require('./src/dailyAgent');
 
 exports.processDaily = processDaily;
 exports.triggerDailyAgent = triggerDailyAgent;
+exports.runDailyAgent = runDailyAgent;
