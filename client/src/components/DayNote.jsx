@@ -21,6 +21,61 @@ function formatDisplayDate(dateString) {
   });
 }
 
+function TagGutter({ editor, tags }) {
+  const [gutterItems, setGutterItems] = useState([]);
+
+  useEffect(() => {
+    if (!editor) return;
+
+    function updateGutter() {
+      const items = [];
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'paragraph' && node.attrs.tags?.length > 0) {
+          const dom = editor.view.nodeDOM(pos);
+          if (dom) {
+            const editorDom = editor.view.dom;
+            const rect = dom.getBoundingClientRect();
+            const editorRect = editorDom.getBoundingClientRect();
+            items.push({
+              top: rect.top - editorRect.top,
+              tags: node.attrs.tags,
+            });
+          }
+        }
+      });
+      setGutterItems(items);
+    }
+
+    updateGutter();
+    editor.on('update', updateGutter);
+    editor.on('selectionUpdate', updateGutter);
+    window.addEventListener('scroll', updateGutter, { passive: true });
+
+    return () => {
+      editor.off('update', updateGutter);
+      editor.off('selectionUpdate', updateGutter);
+      window.removeEventListener('scroll', updateGutter);
+    };
+  }, [editor]);
+
+  return (
+    <div className="tag-gutter">
+      {gutterItems.map((item, i) => (
+        <div key={i} className="tag-gutter-item" style={{ top: item.top }}>
+          {item.tags.slice(0, 3).map((tagId) => (
+            <span
+              key={tagId}
+              className="tag-gutter-dot"
+              style={{ backgroundColor: tags[tagId]?.color || '#ccc' }}
+              title={tags[tagId]?.name || tagId}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export const DayNote = forwardRef(function DayNote({ date, content, spaceId, tags, onContentChange }, ref) {
   const [saving, setSaving] = useState(false);
   const saveTimeoutRef = useRef(null);
@@ -199,6 +254,7 @@ export const DayNote = forwardRef(function DayNote({ date, content, spaceId, tag
         <h2 className="day-note-date">{formatDisplayDate(date)}</h2>
       </div>
       <div className="day-note-paper">
+        <TagGutter editor={editor} tags={tags || {}} />
         <EditorContent editor={editor} />
         {showTagPicker && (
           <TagPicker
