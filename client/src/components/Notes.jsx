@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react
 import { useSpace } from '../hooks/useSpace';
 import { useNotes } from '../hooks/useNotes';
 import { useCalendarConnections } from '../hooks/useCalendarConnections';
+import { useTags } from '../hooks/useTags';
 import { signOut } from '../services/authService';
 import { connectGoogleCalendar, disconnectCalendar } from '../services/calendarService';
 import { DayNote } from './DayNote';
@@ -28,6 +29,7 @@ export function Notes({ user }) {
     updateNoteLocal
   } = useNotes(space?.id);
   const { connections: calendarConnections } = useCalendarConnections(user.uid);
+  const { tags } = useTags(space?.id);
 
   const [showMenu, setShowMenu] = useState(false);
   const [calendarLoading, setCalendarLoading] = useState(false);
@@ -229,6 +231,7 @@ export function Notes({ user }) {
             date={date}
             content={notes[date]?.content || ''}
             spaceId={space?.id}
+            tags={tags}
             onContentChange={(content) => updateNoteLocal(date, content)}
           />
         ))}

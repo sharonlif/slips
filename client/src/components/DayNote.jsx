@@ -6,6 +6,7 @@ import { TimestampedParagraph } from '../editor/TimestampedParagraph';
 import TimestampPlugin from '../editor/TimestampPlugin';
 import { prepareContent } from '../editor/contentMigration';
 import { updateNote, subscribeToNote } from '../services/noteService';
+import { TagPicker } from './TagPicker';
 import './DayNote.css';
 
 function formatDisplayDate(dateString) {
@@ -20,7 +21,7 @@ function formatDisplayDate(dateString) {
   });
 }
 
-export const DayNote = forwardRef(function DayNote({ date, content, spaceId, onContentChange }, ref) {
+export const DayNote = forwardRef(function DayNote({ date, content, spaceId, tags, onContentChange }, ref) {
   const [saving, setSaving] = useState(false);
   const saveTimeoutRef = useRef(null);
   const pendingContentRef = useRef(null);
@@ -28,6 +29,8 @@ export const DayNote = forwardRef(function DayNote({ date, content, spaceId, onC
   const lastSavedRef = useRef(content);
   const containerRef = useRef(null);
   const isExternalUpdate = useRef(false);
+  const [showTagPicker, setShowTagPicker] = useState(false);
+  const [tagPickerPosition, setTagPickerPosition] = useState({ top: 0, left: 0 });
 
   const editor = useEditor({
     extensions: [
@@ -57,6 +60,13 @@ export const DayNote = forwardRef(function DayNote({ date, content, spaceId, onC
         class: 'day-note-editor',
       },
       handleKeyDown(view, event) {
+        if ((event.metaKey || event.ctrlKey) && event.key === '/') {
+          event.preventDefault();
+          const coords = view.coordsAtPos(view.state.selection.from);
+          setTagPickerPosition({ top: coords.bottom + 4, left: coords.left });
+          setShowTagPicker(true);
+          return true;
+        }
         if (event.key === 'Tab') {
           event.preventDefault();
           view.dispatch(view.state.tr.insertText('\t'));
@@ -108,6 +118,40 @@ export const DayNote = forwardRef(function DayNote({ date, content, spaceId, onC
     }
   }, [spaceId, date, onContentChange]);
 
+  function handleToggleTag(tagId) {
+    if (!editor) return;
+    const { from, to } = editor.state.selection;
+    const { tr } = editor.state;
+    editor.state.doc.nodesBetween(from, to, (node, pos) => {
+      if (node.type.name === 'paragraph') {
+        const currentTags = [...(node.attrs.tags || [])];
+        const idx = currentTags.indexOf(tagId);
+        if (idx >= 0) {
+          currentTags.splice(idx, 1);
+        } else {
+          currentTags.push(tagId);
+        }
+        tr.setNodeMarkup(pos, undefined, { ...node.attrs, tags: currentTags });
+      }
+    });
+    editor.view.dispatch(tr);
+    // Trigger save after tag change
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => saveNote(editor.getJSON()), 500);
+  }
+
+  function getActiveTagsForSelection() {
+    if (!editor) return [];
+    const { from, to } = editor.state.selection;
+    const tags = new Set();
+    editor.state.doc.nodesBetween(from, to, (node) => {
+      if (node.type.name === 'paragraph' && node.attrs.tags) {
+        node.attrs.tags.forEach(t => tags.add(t));
+      }
+    });
+    return Array.from(tags);
+  }
+
   useEffect(() => {
     if (!spaceId || !editor) return;
 
@@ -156,6 +200,16 @@ export const DayNote = forwardRef(function DayNote({ date, content, spaceId, onC
       </div>
       <div className="day-note-paper">
         <EditorContent editor={editor} />
+        {showTagPicker && (
+          <TagPicker
+            tags={tags || {}}
+            activeTags={getActiveTagsForSelection()}
+            position={tagPickerPosition}
+            spaceId={spaceId}
+            onToggleTag={handleToggleTag}
+            onClose={() => setShowTagPicker(false)}
+          />
+        )}
       </div>
     </div>
   );
