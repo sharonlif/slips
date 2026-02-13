@@ -28,30 +28,47 @@
 
 .day-note-paper {
   display: block;
+  flex: 1;
 }
 
-.day-note-textarea {
+/* Tiptap editor — styled to look identical to the old textarea */
+.day-note-editor {
   width: 100%;
-  min-height: calc(100vh - 3rem); /* Fallback before JS calculates */
+  min-height: calc(100vh - 3rem);
   padding: 0 1rem 1rem;
-  border: none;
-  background: transparent;
   font-family: inherit;
   font-size: 0.875rem;
   line-height: 1.6;
   color: var(--text-primary);
-  resize: none;
   outline: none;
-  overflow: hidden; /* Prevent scrollbar, content expands instead */
   box-sizing: border-box;
 }
 
-.day-note-textarea::placeholder {
+.day-note-editor p {
+  margin: 0;
+  padding: 0;
+}
+
+/* Placeholder styling */
+.day-note-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
   color: var(--text-secondary);
+  pointer-events: none;
+  height: 0;
+}
+
+/* Remove any ProseMirror default styling */
+.ProseMirror {
+  outline: none;
+}
+
+.ProseMirror:focus {
+  outline: none;
 }
 
 @media (max-width: 600px) {
-  .day-note-textarea {
+  .day-note-editor {
     font-size: 1rem;
     padding: 0 0.75rem 1rem;
   }

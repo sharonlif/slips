@@ -1,4 +1,10 @@
 import { useState, useEffect, useRef, useCallback, forwardRef } from 'react';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Placeholder from '@tiptap/extension-placeholder';
+import { TimestampedParagraph } from '../editor/TimestampedParagraph';
+import TimestampPlugin from '../editor/TimestampPlugin';
+import { prepareContent } from '../editor/contentMigration';
 import { updateNote, subscribeToNote } from '../services/noteService';
 import './DayNote.css';
 
@@ -15,70 +21,64 @@ function formatDisplayDate(dateString) {
 }
 
 export const DayNote = forwardRef(function DayNote({ date, content, spaceId, onContentChange }, ref) {
-  const [localContent, setLocalContent] = useState(content);
   const [saving, setSaving] = useState(false);
-
   const saveTimeoutRef = useRef(null);
   const pendingContentRef = useRef(null);
   const isSavingRef = useRef(false);
-  const textareaRef = useRef(null);
   const lastSavedRef = useRef(content);
   const containerRef = useRef(null);
+  const isExternalUpdate = useRef(false);
 
-  // Auto-resize textarea to fit content while maintaining minimum viewport height
-  const adjustTextareaHeight = useCallback(() => {
-    const textarea = textareaRef.current;
-    const container = containerRef.current;
-    if (!textarea || !container) return;
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        paragraph: false,
+        bold: false,
+        italic: false,
+        strike: false,
+        code: false,
+        codeBlock: false,
+        blockquote: false,
+        bulletList: false,
+        orderedList: false,
+        listItem: false,
+        heading: false,
+        horizontalRule: false,
+      }),
+      TimestampedParagraph,
+      TimestampPlugin,
+      Placeholder.configure({
+        placeholder: '',
+      }),
+    ],
+    content: prepareContent(content),
+    editorProps: {
+      attributes: {
+        class: 'day-note-editor',
+      },
+      handleKeyDown(view, event) {
+        if (event.key === 'Tab') {
+          event.preventDefault();
+          view.dispatch(view.state.tr.insertText('\t'));
+          return true;
+        }
+        return false;
+      },
+    },
+    onUpdate: ({ editor }) => {
+      if (isExternalUpdate.current) return;
 
-    // Reset height to auto to get accurate scrollHeight
-    textarea.style.height = 'auto';
+      const json = editor.getJSON();
 
-    // Calculate minimum height (viewport minus header)
-    const header = container.querySelector('.day-note-header');
-    const headerHeight = header ? header.offsetHeight : 0;
-    const minTextareaHeight = window.innerHeight - headerHeight - 16; // 16px for padding
-
-    // Use the larger of scrollHeight or minimum height
-    const newHeight = Math.max(textarea.scrollHeight, minTextareaHeight);
-    textarea.style.height = `${newHeight}px`;
-  }, []);
-
-  useEffect(() => {
-    // Only sync if content differs from what we last saved (i.e., external change from another device)
-    if (content !== lastSavedRef.current) {
-      setLocalContent(content);
-      lastSavedRef.current = content;
-    }
-  }, [content]);
-
-  // Adjust height when content changes or on mount
-  useEffect(() => {
-    adjustTextareaHeight();
-  }, [localContent, adjustTextareaHeight]);
-
-  // Adjust height on window resize
-  useEffect(() => {
-    window.addEventListener('resize', adjustTextareaHeight);
-    return () => window.removeEventListener('resize', adjustTextareaHeight);
-  }, [adjustTextareaHeight]);
-
-  // Subscribe to real-time updates from Firestore
-  useEffect(() => {
-    if (!spaceId) return;
-
-    const unsubscribe = subscribeToNote(spaceId, date, (data) => {
-      const remoteContent = data.content || '';
-      // Only update if content differs from what we last saved (external change)
-      if (remoteContent !== lastSavedRef.current) {
-        setLocalContent(remoteContent);
-        lastSavedRef.current = remoteContent;
-        onContentChange(remoteContent);
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
       }
-    });
 
-    return unsubscribe;
-  }, [spaceId, date, onContentChange]);
+      saveTimeoutRef.current = setTimeout(() => {
+        saveNote(json);
+      }, 500);
+    },
+  });
 
   const saveNote = useCallback(async (contentToSave) => {
     if (!spaceId || isSavingRef.current) {
@@ -108,41 +108,28 @@ export const DayNote = forwardRef(function DayNote({ date, content, spaceId, onC
     }
   }, [spaceId, date, onContentChange]);
 
-  function handleChange(e) {
-    const newContent = e.target.value;
-    setLocalContent(newContent);
+  useEffect(() => {
+    if (!spaceId || !editor) return;
 
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
+    const unsubscribe = subscribeToNote(spaceId, date, (data) => {
+      const remoteContent = data.content;
+      if (!remoteContent) return;
 
-    saveTimeoutRef.current = setTimeout(() => {
-      saveNote(newContent);
-    }, 500);
-  }
+      const remoteStr = JSON.stringify(remoteContent);
+      const lastStr = JSON.stringify(lastSavedRef.current);
 
-  function handleKeyDown(e) {
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const textarea = e.target;
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const newContent = localContent.substring(0, start) + '\t' + localContent.substring(end);
-      setLocalContent(newContent);
-
-      // Restore cursor position after the tab
-      requestAnimationFrame(() => {
-        textarea.selectionStart = textarea.selectionEnd = start + 1;
-      });
-
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
+      if (remoteStr !== lastStr) {
+        isExternalUpdate.current = true;
+        const prepared = prepareContent(remoteContent);
+        editor.commands.setContent(prepared);
+        lastSavedRef.current = remoteContent;
+        onContentChange(remoteContent);
+        isExternalUpdate.current = false;
       }
-      saveTimeoutRef.current = setTimeout(() => {
-        saveNote(newContent);
-      }, 500);
-    }
-  }
+    });
+
+    return unsubscribe;
+  }, [spaceId, date, editor, onContentChange]);
 
   useEffect(() => {
     return () => {
@@ -152,7 +139,6 @@ export const DayNote = forwardRef(function DayNote({ date, content, spaceId, onC
     };
   }, []);
 
-  // Combine forwarded ref with local containerRef
   const setRefs = useCallback((node) => {
     containerRef.current = node;
     if (typeof ref === 'function') {
@@ -169,14 +155,7 @@ export const DayNote = forwardRef(function DayNote({ date, content, spaceId, onC
         <h2 className="day-note-date">{formatDisplayDate(date)}</h2>
       </div>
       <div className="day-note-paper">
-        <textarea
-          ref={textareaRef}
-          className="day-note-textarea"
-          value={localContent}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          placeholder=""
-        />
+        <EditorContent editor={editor} />
       </div>
     </div>
   );
