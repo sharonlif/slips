@@ -6,6 +6,7 @@ import { useTags } from '../hooks/useTags';
 import { signOut } from '../services/authService';
 import { connectGoogleCalendar, disconnectCalendar } from '../services/calendarService';
 import { DayNote } from './DayNote';
+import { TagView } from './TagView';
 import './Notes.css';
 
 function getTodayDate() {
@@ -36,6 +37,7 @@ export function Notes({ user }) {
   const [todayVisible, setTodayVisible] = useState(true);
   const [todayPosition, setTodayPosition] = useState('visible');
   const [initialScrollDone, setInitialScrollDone] = useState(false);
+  const [activeFilter, setActiveFilter] = useState(null); // { tagId, mode: 'highlight' | 'consolidated' }
   const menuRef = useRef(null);
   const fabRef = useRef(null);
   const pastSentinelRef = useRef(null);
@@ -204,6 +206,18 @@ export function Notes({ user }) {
     }
   }
 
+  function handleTagFilter(tagId) {
+    setActiveFilter({ tagId, mode: 'highlight' });
+  }
+
+  function clearFilter() {
+    setActiveFilter(null);
+  }
+
+  function toggleFilterMode() {
+    setActiveFilter(prev => prev ? { ...prev, mode: prev.mode === 'highlight' ? 'consolidated' : 'highlight' } : null);
+  }
+
   if (spaceLoading || notesLoading) {
     return (
       <div className="notes-loading">
@@ -218,29 +232,50 @@ export function Notes({ user }) {
 
   return (
     <div className="notes-container">
-      <main className="notes-list">
-        {/* Sentinel for loading more past dates */}
-        <div ref={pastSentinelRef} className="scroll-sentinel">
-          {loadingMore && <span className="loading-more">Loading...</span>}
+      {activeFilter && (
+        <div className="filter-bar">
+          <span className="filter-tag-dot" style={{ backgroundColor: tags[activeFilter.tagId]?.color }} />
+          <span className="filter-tag-name">{tags[activeFilter.tagId]?.name}</span>
+          <button className="filter-mode-toggle" onClick={toggleFilterMode}>
+            {activeFilter.mode === 'highlight' ? 'All notes' : 'In-place'}
+          </button>
+          <button className="filter-clear" onClick={clearFilter}>&times;</button>
         </div>
+      )}
+      {activeFilter?.mode === 'consolidated' ? (
+        <TagView
+          spaceId={space?.id}
+          tagId={activeFilter.tagId}
+          tagName={tags[activeFilter.tagId]?.name}
+          tagColor={tags[activeFilter.tagId]?.color}
+        />
+      ) : (
+        <main className="notes-list">
+          {/* Sentinel for loading more past dates */}
+          <div ref={pastSentinelRef} className="scroll-sentinel">
+            {loadingMore && <span className="loading-more">Loading...</span>}
+          </div>
 
-        {dates.map((date) => (
-          <DayNote
-            key={date}
-            ref={date === todayDate ? setTodayRef : null}
-            date={date}
-            content={notes[date]?.content || ''}
-            spaceId={space?.id}
-            tags={tags}
-            onContentChange={(content) => updateNoteLocal(date, content)}
-          />
-        ))}
+          {dates.map((date) => (
+            <DayNote
+              key={date}
+              ref={date === todayDate ? setTodayRef : null}
+              date={date}
+              content={notes[date]?.content || ''}
+              spaceId={space?.id}
+              tags={tags}
+              activeFilter={activeFilter}
+              onTagFilter={handleTagFilter}
+              onContentChange={(content) => updateNoteLocal(date, content)}
+            />
+          ))}
 
-        {/* Sentinel for loading more future dates */}
-        <div ref={futureSentinelRef} className="scroll-sentinel">
-          {loadingFuture && <span className="loading-more">Loading...</span>}
-        </div>
-      </main>
+          {/* Sentinel for loading more future dates */}
+          <div ref={futureSentinelRef} className="scroll-sentinel">
+            {loadingFuture && <span className="loading-more">Loading...</span>}
+          </div>
+        </main>
+      )}
 
       {/* User menu popup */}
       {showMenu && (

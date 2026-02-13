@@ -182,3 +182,47 @@
     right: 1rem;
   }
 }
+
+/* Tag filter bar */
+.filter-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: var(--bg-primary, #fff);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.8125rem;
+}
+
+.filter-tag-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.filter-tag-name {
+  color: var(--text-primary);
+}
+
+.filter-mode-toggle,
+.filter-clear {
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.filter-clear {
+  border: none;
+  font-size: 1rem;
+  padding: 0 4px;
+}
