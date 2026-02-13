@@ -33,7 +33,8 @@ async function runAgentForUser(userId, spaceId, targetDate, apiKey) {
   // Step 2: Read today's note
   const noteRef = db.collection('spaces').doc(spaceId).collection('notes').doc(targetDate);
   const noteSnap = await noteRef.get();
-  const noteContent = noteSnap.exists ? noteSnap.data().content : '';
+  const rawContent = noteSnap.exists ? noteSnap.data().content : '';
+  const noteContent = typeof rawContent === 'string' ? rawContent : tiptapJsonToText(rawContent);
 
   // If no note content and no open tasks, nothing to do
   if (!noteContent && context.openTasks.length === 0) {
@@ -88,12 +89,38 @@ async function runAgentForUser(userId, spaceId, targetDate, apiKey) {
   const tomorrowDate = getNextDate(targetDate);
   const tomorrowNoteRef = db.collection('spaces').doc(spaceId).collection('notes').doc(tomorrowDate);
   const tomorrowSnap = await tomorrowNoteRef.get();
-  const existingContent = tomorrowSnap.exists ? (tomorrowSnap.data().content || '') : '';
+  const existingRaw = tomorrowSnap.exists ? (tomorrowSnap.data().content || '') : '';
 
   const taskListText = parsed.tomorrowNote || formatTaskList(updatedOpenTasks);
-  const newContent = existingContent
-    ? `${taskListText}\n\n---\n\n${existingContent}`
-    : taskListText;
+  const taskListJson = textToTiptapJson(taskListText);
+
+  let newContent;
+  if (tomorrowSnap.exists && typeof existingRaw === 'object' && existingRaw.content) {
+    // Existing Tiptap JSON — prepend task paragraphs
+    const separator = {
+      type: 'paragraph',
+      attrs: { id: generateId(), createdAt: Date.now(), modifiedAt: null, tags: [] },
+      content: [{ type: 'text', text: '---' }],
+    };
+    newContent = {
+      type: 'doc',
+      content: [...taskListJson.content, separator, ...existingRaw.content],
+    };
+  } else if (typeof existingRaw === 'string' && existingRaw) {
+    // Legacy string content — convert and prepend
+    const existingJson = textToTiptapJson(existingRaw);
+    const separator = {
+      type: 'paragraph',
+      attrs: { id: generateId(), createdAt: Date.now(), modifiedAt: null, tags: [] },
+      content: [{ type: 'text', text: '---' }],
+    };
+    newContent = {
+      type: 'doc',
+      content: [...taskListJson.content, separator, ...existingJson.content],
+    };
+  } else {
+    newContent = taskListJson;
+  }
 
   await tomorrowNoteRef.set({
     content: newContent,
@@ -300,6 +327,40 @@ function formatTaskList(openTasks) {
   if (openTasks.length === 0) return '';
   const lines = openTasks.map(t => `- [ ] ${t.text}`);
   return `## Tasks\n${lines.join('\n')}`;
+}
+
+function tiptapJsonToText(doc) {
+  if (!doc || !doc.content) return '';
+  return doc.content
+    .map((node) => {
+      if (!node.content) return '';
+      return node.content.map((inline) => inline.text || '').join('');
+    })
+    .join('\n');
+}
+
+function textToTiptapJson(text) {
+  if (!text) {
+    return {
+      type: 'doc',
+      content: [{
+        type: 'paragraph',
+        attrs: { id: generateId(), createdAt: Date.now(), modifiedAt: null, tags: [] },
+      }],
+    };
+  }
+  return {
+    type: 'doc',
+    content: text.split('\n').map((line) => ({
+      type: 'paragraph',
+      attrs: { id: generateId(), createdAt: Date.now(), modifiedAt: null, tags: [] },
+      ...(line ? { content: [{ type: 'text', text: line }] } : {}),
+    })),
+  };
+}
+
+function generateId() {
+  return Math.random().toString(36).substring(2, 10);
 }
 
 module.exports = { processDaily, triggerDailyAgent, runDailyAgent };
