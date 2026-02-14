@@ -77,7 +77,7 @@ function TagGutter({ editor, tags, onTagFilter }) {
   );
 }
 
-export const DayNote = forwardRef(function DayNote({ date, content, spaceId, tags, activeFilter, onTagFilter, onContentChange }, ref) {
+export const DayNote = forwardRef(function DayNote({ date, content, spaceId, tags, onTagFilter, onContentChange }, ref) {
   const [saving, setSaving] = useState(false);
   const saveTimeoutRef = useRef(null);
   const pendingContentRef = useRef(null);
@@ -238,47 +238,6 @@ export const DayNote = forwardRef(function DayNote({ date, content, spaceId, tag
       }
     };
   }, []);
-
-  // Apply dimming when activeFilter is active
-  useEffect(() => {
-    if (!editor) return;
-
-    function applyFilter() {
-      const editorDom = editor.view.dom;
-
-      editor.state.doc.descendants((node, pos, parent, index) => {
-        if (node.type.name === 'paragraph') {
-          const dom = editorDom.children[index];
-          if (!dom) return;
-
-          if (activeFilter) {
-            const hasTags = node.attrs.tags?.includes(activeFilter.tagId);
-            if (hasTags) {
-              dom.classList.remove('dimmed');
-              dom.classList.add('tag-highlighted');
-            } else {
-              dom.classList.add('dimmed');
-              dom.classList.remove('tag-highlighted');
-            }
-          } else {
-            dom.classList.remove('dimmed', 'tag-highlighted');
-          }
-        }
-      });
-    }
-
-    applyFilter();
-    editor.on('update', applyFilter);
-
-    return () => {
-      editor.off('update', applyFilter);
-      // Clean up classes
-      const editorDom = editor.view.dom;
-      editorDom.querySelectorAll('p').forEach(p => {
-        p.classList.remove('dimmed', 'tag-highlighted');
-      });
-    };
-  }, [editor, activeFilter]);
 
   const setRefs = useCallback((node) => {
     containerRef.current = node;

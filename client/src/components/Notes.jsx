@@ -6,7 +6,6 @@ import { useTags } from '../hooks/useTags';
 import { signOut } from '../services/authService';
 import { connectGoogleCalendar, disconnectCalendar } from '../services/calendarService';
 import { DayNote } from './DayNote';
-import { TagView } from './TagView';
 import './Notes.css';
 
 function getTodayDate() {
@@ -37,7 +36,7 @@ export function Notes({ user }) {
   const [todayVisible, setTodayVisible] = useState(true);
   const [todayPosition, setTodayPosition] = useState('visible');
   const [initialScrollDone, setInitialScrollDone] = useState(false);
-  const [activeFilter, setActiveFilter] = useState(null); // { tagId, mode: 'highlight' | 'consolidated' }
+  const [activeTagFilter, setActiveTagFilter] = useState(null); // tagId or null
   const menuRef = useRef(null);
   const fabRef = useRef(null);
   const pastSentinelRef = useRef(null);
@@ -207,15 +206,11 @@ export function Notes({ user }) {
   }
 
   function handleTagFilter(tagId) {
-    setActiveFilter({ tagId, mode: 'highlight' });
+    setActiveTagFilter(prev => prev === tagId ? null : tagId);
   }
 
   function clearFilter() {
-    setActiveFilter(null);
-  }
-
-  function toggleFilterMode() {
-    setActiveFilter(prev => prev ? { ...prev, mode: prev.mode === 'highlight' ? 'consolidated' : 'highlight' } : null);
+    setActiveTagFilter(null);
   }
 
   if (spaceLoading || notesLoading) {
@@ -226,56 +221,58 @@ export function Notes({ user }) {
     );
   }
 
+  // Filter dates to only show notes containing the active tag
+  const filteredDates = activeTagFilter
+    ? dates.filter((date) => {
+        const noteContent = notes[date]?.content;
+        if (!noteContent?.content) return false;
+        return noteContent.content.some(
+          (node) => node.attrs?.tags?.includes(activeTagFilter)
+        );
+      })
+    : dates;
+
   const userInitial = user.displayName
     ? user.displayName.charAt(0).toUpperCase()
     : user.email.charAt(0).toUpperCase();
 
   return (
     <div className="notes-container">
-      {activeFilter && (
+      {activeTagFilter && (
         <div className="filter-bar">
-          <span className="filter-tag-dot" style={{ backgroundColor: tags[activeFilter.tagId]?.color }} />
-          <span className="filter-tag-name">{tags[activeFilter.tagId]?.name}</span>
-          <button className="filter-mode-toggle" onClick={toggleFilterMode}>
-            {activeFilter.mode === 'highlight' ? 'All notes' : 'In-place'}
-          </button>
+          <span className="filter-tag-dot" style={{ backgroundColor: tags[activeTagFilter]?.color }} />
+          <span className="filter-tag-name">{tags[activeTagFilter]?.name}</span>
           <button className="filter-clear" onClick={clearFilter}>&times;</button>
         </div>
       )}
-      {activeFilter?.mode === 'consolidated' ? (
-        <TagView
-          spaceId={space?.id}
-          tagId={activeFilter.tagId}
-          tagName={tags[activeFilter.tagId]?.name}
-          tagColor={tags[activeFilter.tagId]?.color}
-        />
-      ) : (
-        <main className="notes-list">
-          {/* Sentinel for loading more past dates */}
+      <main className="notes-list">
+        {/* Sentinel for loading more past dates — hidden when filtering */}
+        {!activeTagFilter && (
           <div ref={pastSentinelRef} className="scroll-sentinel">
             {loadingMore && <span className="loading-more">Loading...</span>}
           </div>
+        )}
 
-          {dates.map((date) => (
-            <DayNote
-              key={date}
-              ref={date === todayDate ? setTodayRef : null}
-              date={date}
-              content={notes[date]?.content || ''}
-              spaceId={space?.id}
-              tags={tags}
-              activeFilter={activeFilter}
-              onTagFilter={handleTagFilter}
-              onContentChange={(content) => updateNoteLocal(date, content)}
-            />
-          ))}
+        {filteredDates.map((date) => (
+          <DayNote
+            key={date}
+            ref={date === todayDate ? setTodayRef : null}
+            date={date}
+            content={notes[date]?.content || ''}
+            spaceId={space?.id}
+            tags={tags}
+            onTagFilter={handleTagFilter}
+            onContentChange={(content) => updateNoteLocal(date, content)}
+          />
+        ))}
 
-          {/* Sentinel for loading more future dates */}
+        {/* Sentinel for loading more future dates — hidden when filtering */}
+        {!activeTagFilter && (
           <div ref={futureSentinelRef} className="scroll-sentinel">
             {loadingFuture && <span className="loading-more">Loading...</span>}
           </div>
-        </main>
-      )}
+        )}
+      </main>
 
       {/* User menu popup */}
       {showMenu && (

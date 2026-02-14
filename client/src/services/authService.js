@@ -10,6 +10,7 @@ import { auth, db } from '../firebase';
 import { createPersonalSpace } from './spaceService';
 
 const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 async function handleUserFirstSignIn(user) {
   const userRef = doc(db, 'users', user.uid);
