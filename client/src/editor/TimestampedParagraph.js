@@ -38,6 +38,7 @@ const TimestampedParagraph = Node.create({
       },
       tags: {
         default: [],
+        keepOnSplit: true,
         parseHTML: (element) => {
           const val = element.getAttribute('data-tags');
           return val ? JSON.parse(val) : [];

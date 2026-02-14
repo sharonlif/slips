@@ -5,8 +5,10 @@ import './TagPicker.css';
 export function TagPicker({ tags, activeTags, position, spaceId, onToggleTag, onClose }) {
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
   const inputRef = useRef(null);
   const containerRef = useRef(null);
+  const listRef = useRef(null);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -37,6 +39,12 @@ export function TagPicker({ tags, activeTags, position, spaceId, onToggleTag, on
   const showCreateOption = search.trim() &&
     !Object.values(tags).some(t => t.name.toLowerCase() === search.trim().toLowerCase());
 
+  // Build flat list of selectable items for keyboard nav
+  const items = [
+    ...filteredTags.map(([tagId]) => ({ type: 'tag', tagId })),
+    ...(showCreateOption ? [{ type: 'create' }] : []),
+  ];
+
   async function handleCreateTag() {
     if (!search.trim() || creating) return;
     setCreating(true);
@@ -50,6 +58,32 @@ export function TagPicker({ tags, activeTags, position, spaceId, onToggleTag, on
     setCreating(false);
   }
 
+  function selectHighlighted() {
+    const item = items[highlightedIndex];
+    if (!item) return;
+    if (item.type === 'tag') onToggleTag(item.tagId);
+    else if (item.type === 'create') handleCreateTag();
+  }
+
+  function handleInputKeyDown(e) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex(i => Math.min(i + 1, items.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      selectHighlighted();
+    }
+  }
+
+  // Scroll highlighted item into view
+  useEffect(() => {
+    const el = listRef.current?.children[highlightedIndex];
+    if (el) el.scrollIntoView({ block: 'nearest' });
+  }, [highlightedIndex]);
+
   return (
     <div
       className="tag-picker"
@@ -61,21 +95,17 @@ export function TagPicker({ tags, activeTags, position, spaceId, onToggleTag, on
         className="tag-picker-search"
         type="text"
         value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && showCreateOption) {
-            handleCreateTag();
-          }
-        }}
+        onChange={(e) => { setSearch(e.target.value); setHighlightedIndex(0); }}
+        onKeyDown={handleInputKeyDown}
         placeholder="Search or create tag..."
       />
-      <div className="tag-picker-list">
-        {filteredTags.map(([tagId, tag]) => {
+      <div className="tag-picker-list" ref={listRef}>
+        {filteredTags.map(([tagId, tag], i) => {
           const isActive = activeTags.includes(tagId);
           return (
             <button
               key={tagId}
-              className={`tag-picker-item ${isActive ? 'active' : ''}`}
+              className={`tag-picker-item ${isActive ? 'active' : ''} ${highlightedIndex === i ? 'highlighted' : ''}`}
               onClick={() => onToggleTag(tagId)}
             >
               <span className="tag-dot" style={{ backgroundColor: tag.color }} />
@@ -86,7 +116,7 @@ export function TagPicker({ tags, activeTags, position, spaceId, onToggleTag, on
         })}
         {showCreateOption && (
           <button
-            className="tag-picker-item tag-picker-create"
+            className={`tag-picker-item tag-picker-create ${highlightedIndex === filteredTags.length ? 'highlighted' : ''}`}
             onClick={handleCreateTag}
             disabled={creating}
           >

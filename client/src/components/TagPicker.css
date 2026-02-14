@@ -45,7 +45,8 @@
   text-align: left;
 }
 
-.tag-picker-item:hover {
+.tag-picker-item:hover,
+.tag-picker-item.highlighted {
   background: var(--bg-hover, #f5f5f5);
 }
 

@@ -123,6 +123,17 @@ export const DayNote = forwardRef(function DayNote({ date, content, spaceId, tag
           setShowTagPicker(true);
           return true;
         }
+        // Enter or Backspace on empty tagged paragraph → clear tags
+        if (event.key === 'Enter' || event.key === 'Backspace') {
+          const { $from } = view.state.selection;
+          const node = $from.parent;
+          if (node.type.name === 'paragraph' && node.attrs.tags?.length > 0 && node.content.size === 0) {
+            event.preventDefault();
+            const pos = $from.before();
+            view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, tags: [] }));
+            return true;
+          }
+        }
         if (event.key === 'Tab') {
           event.preventDefault();
           view.dispatch(view.state.tr.insertText('\t'));
